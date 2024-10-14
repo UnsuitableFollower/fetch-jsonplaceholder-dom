@@ -1,0 +1,17 @@
+body {
+    background-color: #f8f9fa;
+  }
+  
+  h1 {
+    color: #343a40;
+  }
+  
+  table {
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  }
+  
+  #apiUrl {
+    max-width: 80%;
+    margin-right: 10px;
+  }
+  

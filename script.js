@@ -1,115 +1,243 @@
-const fetchBtn = document.getElementById('fetchBtn');
-const apiUrlInput = document.getElementById('apiUrl');
 const tableHeader = document.getElementById('tableHeader');
 const tableBody = document.getElementById('tableBody');
 const loadingMsg = document.getElementById('loading');
 const errorMsg = document.getElementById('errorMsg');
+const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+const modalBody = document.getElementById('modalBody');
 
-// Event listener untuk tombol Fetch
-fetchBtn.addEventListener('click', () => {
-  const apiUrl = apiUrlInput.value.trim();
-
-  // Validasi jika URL kosong atau tidak valid
-  if (!isValidUrl(apiUrl)) {
-    showError('URL tidak valid. Mohon masukkan URL yang benar.');
-    return;
-  }
-
-  showLoading(); // Tampilkan loading
+// Automatically fetch data from the API when the page loads
+window.addEventListener('DOMContentLoaded', () => {
+  const apiUrl = 'https://jsonplaceholder.typicode.com/posts/';
   fetchData(apiUrl);
 });
 
-// Function untuk memeriksa validitas URL
-function isValidUrl(url) {
-  try {
-    new URL(url); // Jika URL valid, tidak ada error
-    return true;
-  } catch {
-    return false; // Jika URL tidak valid, return false
-  }
-}
-
-// Function untuk mengambil data menggunakan async/await
+// Fetch data from the API
 async function fetchData(url) {
   try {
+    showLoading();
     const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
     const data = await response.json();
-
-    // Jika respons berupa array atau objek tunggal
-    if (Array.isArray(data)) {
-      displayArrayData(data);
-    } else {
-      displayObjectData(data);
-    }
+    await displayData(data);
   } catch (error) {
-    console.error('Error fetching data:', error);
     showError('Gagal mengambil data. Cek URL atau koneksi internet Anda.');
   } finally {
-    hideLoading(); // Sembunyikan loading
+    hideLoading();
   }
 }
 
-// Function untuk menampilkan data dalam tabel (array)
-function displayArrayData(dataArray) {
-  if (dataArray.length === 0) return;
+// Display users and their posts in the table
+async function displayData(dataArray) {
+  const userMap = new Map();
 
-  generateTableHeader(Object.keys(dataArray[0]));
+  for (const post of dataArray) {
+    const user = await fetchUser(post.userId);
+    if (!userMap.has(post.userId)) {
+      userMap.set(post.userId, { user, posts: [] });
+    }
+    userMap.get(post.userId).posts.push(post);
+  }
 
+  generateTableHeader(['Nama', 'Nomor', 'Email', 'Actions']);
   tableBody.innerHTML = '';
-  dataArray.forEach(item => {
+
+  userMap.forEach(({ user }) => {
     const row = document.createElement('tr');
-    row.innerHTML = Object.values(item)
-      .map(value => `<td>${value}</td>`)
-      .join('');
+    row.innerHTML = `
+      <td>${user.name || 'N/A'}</td>
+      <td>${user.phone || 'N/A'}</td>
+      <td>${user.email || 'N/A'}</td>
+      <td>
+        <button class="btn btn-info btn-sm me-1" onclick="fetchUserPosts(${user.id})">Post</button>
+        <button class="btn btn-warning btn-sm me-1" onclick="fetchUserAlbums(${user.id})">Album</button>
+        <button class="btn btn-success btn-sm me-1" onclick="fetchUserTodos(${user.id})">Todo List</button>
+        <button class="btn btn-secondary btn-sm" onclick="fetchUserDetail(${user.id})">Detail</button>
+      </td>
+    `;
     tableBody.appendChild(row);
   });
 
-  errorMsg.classList.add('d-none'); // Sembunyikan pesan error
+  errorMsg.classList.add('d-none');
 }
 
-// Function untuk menampilkan data dalam tabel (objek tunggal)
-function displayObjectData(dataObject) {
-  generateTableHeader(Object.keys(dataObject));
-
-  tableBody.innerHTML = '';
-  const row = document.createElement('tr');
-  row.innerHTML = Object.values(dataObject)
-    .map(value => `<td>${value}</td>`)
-    .join('');
-  tableBody.appendChild(row);
-
-  errorMsg.classList.add('d-none'); // Sembunyikan pesan error
+// Fetch user data by userId
+async function fetchUser(userId) {
+  try {
+    const response = await fetch(`https://jsonplaceholder.typicode.com/users/${userId}`);
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    return { name: 'N/A', phone: 'N/A', email: 'N/A' };
+  }
 }
 
-// Function untuk membuat header tabel
-function generateTableHeader(keys) {
-  tableHeader.innerHTML = `
-    <tr>
-      ${keys.map(key => `<th>${key}</th>`).join('')}
-    </tr>
+// Fetch and display user posts in the modal
+async function fetchUserPosts(userId) {
+  try {
+    const response = await fetch(`https://jsonplaceholder.typicode.com/posts?userId=${userId}`);
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+    const posts = await response.json();
+    modalBody.innerHTML = formatPostData(posts);
+    detailModal.show();
+  } catch (error) {
+    modalBody.innerHTML = '<p>Error fetching posts.</p>';
+  }
+}
+
+// Fetch and display user albums in the modal
+async function fetchUserAlbums(userId) {
+  try {
+    const response = await fetch(`https://jsonplaceholder.typicode.com/albums?userId=${userId}`);
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+    const albums = await response.json();
+    modalBody.innerHTML = formatAlbumData(albums);
+    detailModal.show();
+  } catch (error) {
+    modalBody.innerHTML = '<p>Error fetching albums.</p>';
+  }
+}
+
+// Fetch and display user todos in the modal
+async function fetchUserTodos(userId) {
+  try {
+    const response = await fetch(`https://jsonplaceholder.typicode.com/todos?userId=${userId}`);
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+    const todos = await response.json();
+    modalBody.innerHTML = formatTodoData(todos);
+    detailModal.show();
+  } catch (error) {
+    modalBody.innerHTML = '<p>Error fetching todos.</p>';
+  }
+}
+
+// Format post data for the modal
+function formatPostData(posts) {
+  if (posts.length === 0) return '<p>No posts found.</p>';
+  return `
+    <h5>Posts:</h5>
+    <ul class="list-group">
+      ${posts.map(post => `<li class="list-group-item"><strong>${post.title}</strong>: ${post.body}</li>`).join('')}
+    </ul>
   `;
 }
 
-// Function untuk menampilkan pesan error
+// Format album data for the modal
+function formatAlbumData(albums) {
+  if (albums.length === 0) return '<p>No albums found.</p>';
+  return `
+    <h5>Albums:</h5>
+    <ul class="list-group">
+      ${albums.map(album => `
+        <li class="list-group-item">
+          <strong>${album.title}</strong>
+          <button class="btn btn-primary btn-sm float-end" onclick="fetchAlbumPhotos(${album.id})">View Photos</button>
+        </li>`).join('')}
+    </ul>
+  `;
+}
+
+// Fetch and display album photos
+async function fetchAlbumPhotos(albumId) {
+  try {
+    const response = await fetch(`https://jsonplaceholder.typicode.com/photos?albumId=${albumId}`);
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+    const photos = await response.json();
+    modalBody.innerHTML = formatPhotoData(photos);
+    detailModal.show();
+  } catch (error) {
+    modalBody.innerHTML = '<p>Error fetching photos.</p>';
+  }
+}
+
+// Fetch and display user details in the modal
+async function fetchUserDetail(userId) {
+  try {
+    const response = await fetch(`https://jsonplaceholder.typicode.com/users/${userId}`);
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+    const user = await response.json();
+    modalBody.innerHTML = formatUserDetail(user);
+    detailModal.show();
+  } catch (error) {
+    modalBody.innerHTML = '<p>Error fetching user details.</p>';
+  }
+}
+
+// Format user detail data for the modal
+function formatUserDetail(user) {
+  return `
+    <h5>User Detail:</h5>
+    <ul class="list-group">
+      <li class="list-group-item"><strong>Name:</strong> ${user.name}</li>
+      <li class="list-group-item"><strong>Email:</strong> ${user.email}</li>
+      <li class="list-group-item"><strong>Phone:</strong> ${user.phone}</li>
+      <li class="list-group-item"><strong>Website:</strong> ${user.website}</li>
+      <li class="list-group-item"><strong>Company:</strong> ${user.company.name}</li>
+      <li class="list-group-item"><strong>Address:</strong> 
+        ${user.address.suite}, ${user.address.street}, ${user.address.city}, ${user.address.zipcode}
+      </li>
+    </ul>
+  `;
+}
+
+
+// Format photo data for the modal
+function formatPhotoData(photos) {
+  if (photos.length === 0) return '<p>No photos found.</p>';
+  return `
+    <h5>Photos:</h5>
+    <div class="row">
+      ${photos.map(photo => `
+        <div class="col-6 col-md-4">
+          <div class="card mb-3">
+            <img src="${photo.thumbnailUrl}" class="card-img-top" alt="${photo.title}">
+            <div class="card-body">
+              <h5 class="card-title">${photo.title}</h5>
+              <a href="${photo.url}" class="btn btn-primary" target="_blank">View Full Image</a>
+            </div>
+          </div>
+        </div>`).join('')}
+    </div>
+  `;
+}
+
+// Format todo data for the modal
+function formatTodoData(todos) {
+  if (todos.length === 0) return '<p>No todos found.</p>';
+  return `
+    <h5>Todo List:</h5>
+    <ul class="list-group">
+      ${todos.map(todo => `
+        <li class="list-group-item">
+          <strong>${todo.title}</strong>
+          <span class="badge bg-${todo.completed ? 'success' : 'danger'} float-end">
+            ${todo.completed ? 'Completed' : 'Incomplete'}
+          </span>
+        </li>`).join('')}
+    </ul>
+  `;
+}
+
+// Generate table header
+function generateTableHeader(keys) {
+  tableHeader.innerHTML = `<tr>${keys.map(key => `<th>${key}</th>`).join('')}</tr>`;
+}
+
+// Show error message
 function showError(message) {
   errorMsg.textContent = message;
-  errorMsg.classList.remove('d-none'); // Tampilkan pesan error
+  errorMsg.classList.remove('d-none');
 }
 
-// Function untuk menampilkan loading spinner
+// Show loading spinner
 function showLoading() {
-  loadingMsg.classList.remove('d-none'); // Tampilkan loading
-  errorMsg.classList.add('d-none'); // Sembunyikan pesan error
-  tableHeader.innerHTML = ''; // Reset header tabel
-  tableBody.innerHTML = ''; // Reset body tabel
+  loadingMsg.classList.remove('d-none');
+  errorMsg.classList.add('d-none');
+  tableHeader.innerHTML = '';
+  tableBody.innerHTML = '';
 }
 
-// Function untuk menyembunyikan loading spinner
+// Hide loading spinner
 function hideLoading() {
-  loadingMsg.classList.add('d-none'); // Sembunyikan loading
+  loadingMsg.classList.add('d-none');
 }
